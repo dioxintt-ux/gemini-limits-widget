@@ -140,6 +140,51 @@ def main():
     # 4. Формируем выпадающее меню
     print("---")
     
+    # Вычисляем средние лимиты по всем аккаунтам
+    total_5h = 0
+    total_weekly = 0
+    valid_accounts_count = 0
+    
+    for account in quotas_data:
+        status = account.get("status")
+        if status != "ok":
+            continue
+        q = account.get("quotas")
+        limits = {}
+        if q and q.get("groups"):
+            gemini_groups = [g for g in q["groups"] if "gemini" in g.get("displayName", "").lower()]
+            if gemini_groups:
+                limits = gemini_groups[0].get("limits", {})
+                
+        if not limits:
+            limits = {
+                "weekly": {"used_percent": 0},
+                "5h": {"used_percent": 0}
+            }
+            
+        weekly_percent = limits.get("weekly", {}).get("used_percent", 0)
+        five_hour_percent = limits.get("5h", {}).get("used_percent", 0)
+        
+        # Корректируем 5-часовой лимит, если недельный исчерпан (< 10%)
+        if weekly_percent < 10:
+            five_hour_percent = 0
+            
+        total_weekly += weekly_percent
+        total_5h += five_hour_percent
+        valid_accounts_count += 1
+        
+    if valid_accounts_count > 0:
+        avg_weekly = int(round(total_weekly / valid_accounts_count))
+        avg_5h = int(round(total_5h / valid_accounts_count))
+        
+        print("Общие лимиты (среднее) | sfimage=chart.bar.fill sfcolor=#AEAEB2 size=11 style=bold color=#ffffff")
+        bar_5h, color_5h = make_progress_bar(avg_5h)
+        bar_wk, color_wk = make_progress_bar(avg_weekly)
+        
+        print(f"  Five Hour Limit: {bar_5h} | color={color_5h} font=Menlo size=10 sfimage=clock sfcolor=#AEAEB2")
+        print(f"  Weekly Limit: {bar_wk} | color={color_wk} font=Menlo size=10 sfimage=calendar sfcolor=#AEAEB2")
+        print("---")
+    
     # Сортируем аккаунты в нужном порядке
     quotas_data.sort(key=sort_key)
     
