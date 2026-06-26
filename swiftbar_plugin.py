@@ -287,7 +287,7 @@ def main():
         # Заголовок аккаунта (подсвечиваем активный в IDE)
         is_active = (active_email_lower == email.lower())
         if is_active:
-            print(f"{email} | sfimage=checkmark.circle.fill sfcolor=#ffffff size=13 style=bold color=#30D158")
+            print(f"{email} | sfimage=checkmark sfcolor=#ffffff size=13 style=bold color=#30D158")
         else:
             db_value = email_to_db_value.get(email.lower())
             if db_value:
