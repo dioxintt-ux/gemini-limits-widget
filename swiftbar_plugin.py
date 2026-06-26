@@ -52,10 +52,10 @@ def make_progress_bar(percent):
     return f"{bar} {percent}%", color
 
 def make_average_progress_bar(percent):
-    # Тонкий и элегантный прогресс-бар для общего баланса (различается визуально)
+    # Широкий и толстый прогресс-бар для общего баланса (█ и ░), но с фиолетовым цветом
     filled = min(25, max(0, int(round(percent * 25 / 100))))
     empty = 25 - filled
-    bar = "━" * filled + "─" * empty
+    bar = "█" * filled + "░" * empty
     
     if percent < 15:
         color = "#FF453A" # Apple System Red
@@ -192,7 +192,7 @@ def main():
         avg_weekly = int(round(total_weekly / valid_accounts_count))
         avg_5h = int(round(total_5h / valid_accounts_count))
         
-        print("ОБЩИЙ БАЛАНС (СРЕДНИЙ) | sfimage=chart.bar.fill sfcolor=#BF5AF2 size=11 style=bold color=#BF5AF2")
+        print("ОБЩИЙ БАЛАНС | sfimage=chart.bar.fill sfcolor=#BF5AF2 size=11 style=bold color=#BF5AF2")
         bar_5h, color_5h = make_average_progress_bar(avg_5h)
         bar_wk, color_wk = make_average_progress_bar(avg_weekly)
         
