@@ -152,9 +152,62 @@ def get_google_tokens(client_id, client_secret):
     # Запоминаем, какой секрет сработал, чтобы сохранить его для fetcher.py
     used_secret = payload["client_secret"]
     
-    return email, refresh_token, used_secret
+    return email, refresh_token, used_secret, access_token
 
-def save_account(email, refresh_token, client_secret):
+
+def encode_varint(value):
+    output = bytearray()
+    while True:
+        towrite = value & 0x7F
+        value >>= 7
+        if value:
+            output.append(towrite | 0x80)
+        else:
+            output.append(towrite)
+            break
+    return bytes(output)
+
+
+def build_credentials_proto(access_token, refresh_token):
+    acc_bytes = access_token.encode('utf-8')
+    f1 = b'\x0a' + encode_varint(len(acc_bytes)) + acc_bytes
+    
+    f2 = b'\x12\x06Bearer'
+    
+    rt_str = refresh_token
+    if rt_str.startswith('1//'):
+        rt_str = 'g' + rt_str
+    rt_bytes = rt_str.encode('utf-8')
+    f3 = b'\x1a' + encode_varint(len(rt_bytes)) + rt_bytes
+    
+    f4 = b'\x22\x06\x08\xc3\xf3\xf8\xd1\x06'
+    
+    return f1 + f2 + f3 + f4
+
+
+def build_outer_proto(cred_proto_bytes):
+    cred_b64 = base64.b64encode(cred_proto_bytes).decode('utf-8')
+    cred_b64_bytes = cred_b64.encode('utf-8')
+    
+    sub1 = b'\x0a' + encode_varint(len(cred_b64_bytes)) + cred_b64_bytes
+    f2 = b'\x12' + encode_varint(len(sub1)) + sub1
+    f1 = b'\x0a\x19oauthTokenInfoSentinelKey'
+    
+    token_sentinel_payload = f1 + f2
+    
+    auth_sentinel = (
+        b'\x0a\xf9\x01\x0a\x1fauthStateWithContextSentinelKey\x12\xd5\x01\x0a\xd2\x01'
+        b'{"state":"signedIn","context":{"project":"","showProjectError":false,"errorMessage":"","ineligibleMessage":"",'
+        b'"verificationUrl":"","isGcpTos":false,"browserOpenFailed":false,"appealUrl":"","appealLinkText":""}}'
+    )
+    
+    token_sentinel = b'\x0a' + encode_varint(len(token_sentinel_payload)) + token_sentinel_payload
+    
+    final_bytes = auth_sentinel + token_sentinel
+    return base64.b64encode(final_bytes).decode('utf-8')
+
+
+def save_account(email, refresh_token, client_secret, db_value=None):
     config_path = os.path.join(os.path.dirname(__file__), "accounts.json")
     
     accounts = []
@@ -176,6 +229,8 @@ def save_account(email, refresh_token, client_secret):
         existing["client_secret"] = client_secret
         if refresh_token:
             existing["refresh_token"] = refresh_token
+        if db_value:
+            existing["db_value"] = db_value
         print(f"Аккаунт {email} обновлен.")
     else:
         if not refresh_token:
@@ -185,7 +240,8 @@ def save_account(email, refresh_token, client_secret):
             "email": email,
             "alias": alias,
             "refresh_token": refresh_token,
-            "client_secret": client_secret
+            "client_secret": client_secret,
+            "db_value": db_value
         })
         print(f"Аккаунт {email} успешно добавлен.")
         
@@ -245,7 +301,7 @@ def try_import_local_token():
                         access_token = response.json().get("access_token")
                         userinfo_resp = requests.get("https://www.googleapis.com/oauth2/v3/userinfo", headers={"Authorization": f"Bearer {access_token}"})
                         email = userinfo_resp.json().get("email", "unknown")
-                        return email, refresh_token, DEFAULT_CLIENT_SECRET
+                        return email, refresh_token, DEFAULT_CLIENT_SECRET, val
             except Exception:
                 pass
     except Exception:
@@ -259,22 +315,37 @@ def main():
     print("Попытка автоматического импорта токена из Antigravity IDE...")
     local_info = try_import_local_token()
     if local_info:
-        email, refresh_token, used_secret = local_info
+        email, refresh_token, used_secret, db_value = local_info
         print(f"✅ Обнаружен активный токен в IDE для аккаунта {email}!")
         try:
             ans = input("Импортировать этот токен? [Y/n]: ").strip().lower()
         except (KeyboardInterrupt, EOFError):
             ans = "y"
         if ans in ("", "y", "yes"):
-            save_account(email, refresh_token, used_secret)
+            save_account(email, refresh_token, used_secret, db_value)
             return
         
     client_id = DEFAULT_CLIENT_ID
     client_secret = DEFAULT_CLIENT_SECRET
 
     try:
-        email, refresh_token, used_secret = get_google_tokens(client_id, client_secret)
-        save_account(email, refresh_token, used_secret)
+        email, refresh_token, used_secret, access_token = get_google_tokens(client_id, client_secret)
+        
+        # Проверяем, совпадает ли полученный email с тем, что сейчас в IDE
+        db_value = None
+        local_info = try_import_local_token()
+        if local_info and local_info[0] == email:
+            db_value = local_info[3]
+            
+        # Если слепка в IDE нет, то строим его динамически
+        if not db_value and access_token:
+            try:
+                cred_proto = build_credentials_proto(access_token, refresh_token)
+                db_value = build_outer_proto(cred_proto)
+            except Exception:
+                pass
+            
+        save_account(email, refresh_token, used_secret, db_value)
     except KeyboardInterrupt:
         print("\nПроцесс прерван пользователем.")
         sys.exit(0)

@@ -18,6 +18,7 @@ QUOTAS_PATH = os.path.join(PROJECT_DIR, "quotas.json")
 ACCOUNTS_PATH = os.path.join(PROJECT_DIR, "accounts.json")
 FETCHER_PATH = os.path.join(PROJECT_DIR, "fetcher.py")
 AUTH_PATH = os.path.join(PROJECT_DIR, "auth.py")
+SWITCH_PATH = os.path.join(PROJECT_DIR, "switch_account.py")
 
 # Находим подходящий интерпретатор Python, в котором установлена библиотека requests
 python_bin = "python3"
@@ -81,6 +82,72 @@ def format_time_remaining(description):
         time_str = time_str.replace("seconds", "сек.").replace("second", "сек.")
         return f"Сброс через: {time_str}"
     return ""
+
+def get_active_ide_email():
+    db_path = os.path.expanduser("~/Library/Application Support/Antigravity IDE/User/globalStorage/state.vscdb")
+    if not os.path.exists(db_path):
+        return None
+    try:
+        import sqlite3
+        import base64
+        import re
+        import json
+        
+        conn = sqlite3.connect(db_path)
+        cursor = conn.cursor()
+        cursor.execute("SELECT value FROM ItemTable WHERE key = 'antigravityUnifiedStateSync.oauthToken'")
+        row = cursor.fetchone()
+        conn.close()
+        if not row:
+            return None
+        val = row[0]
+        try:
+            decoded = base64.b64decode(val)
+        except Exception:
+            decoded = val
+        text = decoded.decode('utf-8', errors='ignore')
+        
+        # Сначала извлекаем refresh_token из сессии
+        candidates = re.findall(r"[a-zA-Z0-9+/=_-]{80,}", text)
+        active_refresh_token = None
+        for cand in candidates:
+            cand_norm = cand.replace('-', '+').replace('_', '/')
+            cand_norm += "=" * ((4 - len(cand_norm) % 4) % 4)
+            try:
+                dec_cand = base64.b64decode(cand_norm)
+                idx = dec_cand.find(b"1//")
+                if idx != -1:
+                    token_part = dec_cand[idx:]
+                    clean_token = bytearray()
+                    for b in token_part:
+                        if 32 <= b <= 126:
+                            clean_token.append(b)
+                        else:
+                            break
+                    raw_token = clean_token.decode('utf-8')
+                    active_refresh_token = re.sub(r'[^a-zA-Z0-9_/\.-]', '', raw_token).rstrip('.')
+                    break
+            except Exception:
+                pass
+                
+        if active_refresh_token and os.path.exists(ACCOUNTS_PATH):
+            with open(ACCOUNTS_PATH, "r", encoding="utf-8") as f:
+                accounts = json.load(f)
+            for acc in accounts:
+                if acc.get("refresh_token") == active_refresh_token:
+                    return acc.get("email")
+                    
+        # Резервный вариант, если токен не распарсился
+        match = re.search(r'"email":"([^"]+)"', text)
+        if match:
+            return match.group(1)
+        match = re.search(r'[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}', text)
+        if match:
+            return match.group(1)
+    except Exception:
+        pass
+    return None
+
 
 def sort_key(account):
     email = account.get("email", "").lower()
@@ -203,6 +270,11 @@ def main():
     # Сортируем аккаунты в нужном порядке
     quotas_data.sort(key=sort_key)
     
+    email_to_db_value = {acc["email"].lower(): acc.get("db_value") for acc in accounts}
+    
+    active_email = get_active_ide_email()
+    active_email_lower = active_email.lower() if active_email else None
+
     for idx, account in enumerate(quotas_data):
         email = account["email"]
         status = account["status"]
@@ -212,8 +284,16 @@ def main():
         if idx > 0:
             print("---")
             
-        # Заголовок аккаунта (только email, ярко-белый цвет в темной теме)
-        print(f"{email} | sfimage=person.crop.circle.fill sfcolor=#0A84FF size=13 style=bold color=#ffffff")
+        # Заголовок аккаунта (подсвечиваем активный в IDE)
+        is_active = (active_email_lower == email.lower())
+        if is_active:
+            print(f"{email} | sfimage=checkmark.circle.fill sfcolor=#30D158 size=13 style=bold color=#30D158")
+        else:
+            db_value = email_to_db_value.get(email.lower())
+            if db_value:
+                print(f"{email} | sfimage=person.crop.circle.fill size=13 style=bold badge=Войти bash={python_bin} param1={SWITCH_PATH} param2={email} terminal=false refresh=true")
+            else:
+                print(f"{email} | sfimage=person.crop.circle.fill size=13 style=bold")
         
         if status == "auth_error":
             print("  Ошибка авторизации. Обновите токен | sfimage=exclamationmark.octagon.fill sfcolor=#FF453A color=#FF453A size=11")
@@ -267,6 +347,12 @@ def main():
             time_remaining = format_time_remaining(desc)
             if time_remaining:
                 print(f"    {time_remaining} | size=10 color=#8E8E93 sfimage=timer sfcolor=#8E8E93")
+                
+        # Кнопка переключения аккаунта
+        if not is_active:
+            db_value = email_to_db_value.get(email.lower())
+            if not db_value:
+                print("  Сессия не импортирована (войдите под ним в IDE один раз) | size=10 color=gray sfimage=exclamationmark.triangle")
                     
     # Системное меню в самом низу
     print("---")

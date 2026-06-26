@@ -171,26 +171,32 @@ def sync_accounts_with_ide(accounts_path):
                                 
                         # Ищем, есть ли уже этот email
                         existing = next((a for a in accounts if a["email"] == email), None)
-                        if existing:
-                            # Если токен изменился, обновляем его
-                            if existing.get("refresh_token") != refresh_token:
-                                existing["refresh_token"] = refresh_token
-                                existing["client_secret"] = DEFAULT_CLIENT_SECRET
-                                with open(accounts_path, "w", encoding="utf-8") as f:
-                                    json.dump(accounts, f, indent=4, ensure_ascii=False)
-                                print(f"Токен для аккаунта {email} синхронизирован с IDE.")
-                        else:
-                            # Добавляем новый аккаунт, импортированный из IDE
+                        updated = False
+                        
+                        if not existing:
                             alias = email.split('@')[0]
-                            accounts.append({
+                            existing = {
                                 "email": email,
                                 "alias": alias,
                                 "refresh_token": refresh_token,
-                                "client_secret": DEFAULT_CLIENT_SECRET
-                            })
+                                "client_secret": DEFAULT_CLIENT_SECRET,
+                                "db_value": val
+                            }
+                            accounts.append(existing)
+                            print(f"Новый аккаунт {email} автоматически импортирован из IDE с сессией.")
+                            updated = True
+                        else:
+                            if existing.get("refresh_token") != refresh_token:
+                                existing["refresh_token"] = refresh_token
+                                updated = True
+                            if existing.get("db_value") != val:
+                                existing["db_value"] = val
+                                updated = True
+                                
+                        if updated:
                             with open(accounts_path, "w", encoding="utf-8") as f:
                                 json.dump(accounts, f, indent=4, ensure_ascii=False)
-                            print(f"Новый аккаунт {email} автоматически импортирован из IDE.")
+                            print(f"Сессия/токен для аккаунта {email} синхронизирована с IDE.")
                         break
             except Exception:
                 pass
@@ -231,6 +237,17 @@ def main():
         
         print(f"\nОбновление лимитов для: {alias} ({email})...")
         access_token = refresh_access_token(client_id, client_secret, refresh_token)
+        
+        if access_token and not account.get("db_value"):
+            try:
+                from auth import build_credentials_proto, build_outer_proto
+                cred_proto = build_credentials_proto(access_token, refresh_token)
+                account["db_value"] = build_outer_proto(cred_proto)
+                with open(accounts_path, "w", encoding="utf-8") as f:
+                    json.dump(accounts, f, indent=4, ensure_ascii=False)
+                print(f"  Сессия для {email} автоматически сгенерирована и сохранена.")
+            except Exception as e:
+                print(f"  Ошибка автогенерации сессии для {email}: {e}")
         
         if not access_token:
             print(f"Пропуск аккаунта {email}: не удалось получить access_token.")
