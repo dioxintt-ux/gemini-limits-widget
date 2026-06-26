@@ -51,6 +51,21 @@ def make_progress_bar(percent):
         
     return f"{bar} {percent}%", color
 
+def make_average_progress_bar(percent):
+    # Тонкий и элегантный прогресс-бар для общего баланса (различается визуально)
+    filled = min(25, max(0, int(round(percent * 25 / 100))))
+    empty = 25 - filled
+    bar = "━" * filled + "─" * empty
+    
+    if percent < 15:
+        color = "#FF453A" # Apple System Red
+    elif percent < 40:
+        color = "#FFD60A" # Apple System Yellow
+    else:
+        color = "#BF5AF2" # Apple System Purple (фирменный цвет AI/сводки)
+        
+    return f"{bar} {percent}%", color
+
 def format_time_remaining(description):
     if not description:
         return ""
@@ -177,12 +192,12 @@ def main():
         avg_weekly = int(round(total_weekly / valid_accounts_count))
         avg_5h = int(round(total_5h / valid_accounts_count))
         
-        print("Общие лимиты (среднее) | sfimage=chart.bar.fill sfcolor=#AEAEB2 size=11 style=bold color=#ffffff")
-        bar_5h, color_5h = make_progress_bar(avg_5h)
-        bar_wk, color_wk = make_progress_bar(avg_weekly)
+        print("ОБЩИЙ БАЛАНС (СРЕДНИЙ) | sfimage=chart.bar.fill sfcolor=#BF5AF2 size=11 style=bold color=#BF5AF2")
+        bar_5h, color_5h = make_average_progress_bar(avg_5h)
+        bar_wk, color_wk = make_average_progress_bar(avg_weekly)
         
-        print(f"  Five Hour Limit: {bar_5h} | color={color_5h} font=Menlo size=10 sfimage=clock sfcolor=#AEAEB2")
-        print(f"  Weekly Limit: {bar_wk} | color={color_wk} font=Menlo size=10 sfimage=calendar sfcolor=#AEAEB2")
+        print(f"  Five Hour Limit: {bar_5h} | color={color_5h} font=Menlo size=10 sfimage=clock sfcolor=#BF5AF2")
+        print(f"  Weekly Limit: {bar_wk} | color={color_wk} font=Menlo size=10 sfimage=calendar sfcolor=#BF5AF2")
         print("---")
     
     # Сортируем аккаунты в нужном порядке
