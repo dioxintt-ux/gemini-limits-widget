@@ -192,7 +192,7 @@ def main():
         avg_weekly = int(round(total_weekly / valid_accounts_count))
         avg_5h = int(round(total_5h / valid_accounts_count))
         
-        print("ОБЩИЙ БАЛАНС | sfimage=chart.bar.fill sfcolor=#BF5AF2 size=11 style=bold color=#BF5AF2")
+        print("ОБЩИЕ ЛИМИТЫ | sfimage=chart.bar.fill sfcolor=#BF5AF2 size=11 style=bold color=#BF5AF2")
         bar_5h, color_5h = make_average_progress_bar(avg_5h)
         bar_wk, color_wk = make_average_progress_bar(avg_weekly)
         
