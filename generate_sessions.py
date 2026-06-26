@@ -47,10 +47,7 @@ def build_credentials_proto(access_token, refresh_token):
     f2 = b'\x12\x06Bearer'
     
     # Field 3: Refresh Token
-    rt_str = refresh_token
-    if rt_str.startswith('1//'):
-        rt_str = 'g' + rt_str
-    rt_bytes = rt_str.encode('utf-8')
+    rt_bytes = refresh_token.encode('utf-8')
     f3 = b'\x1a' + encode_varint(len(rt_bytes)) + rt_bytes
     
     # Field 4: Expiration/Metadata (константа)

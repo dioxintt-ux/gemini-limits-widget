@@ -174,10 +174,7 @@ def build_credentials_proto(access_token, refresh_token):
     
     f2 = b'\x12\x06Bearer'
     
-    rt_str = refresh_token
-    if rt_str.startswith('1//'):
-        rt_str = 'g' + rt_str
-    rt_bytes = rt_str.encode('utf-8')
+    rt_bytes = refresh_token.encode('utf-8')
     f3 = b'\x1a' + encode_varint(len(rt_bytes)) + rt_bytes
     
     f4 = b'\x22\x06\x08\xc3\xf3\xf8\xd1\x06'
